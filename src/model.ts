@@ -5,7 +5,7 @@ ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/di
 
 export async function runModel(inputData: Float32Array) {
     const session = await ort.InferenceSession.create(
-        'https://raw.githubusercontent.com/booogieeee/drawculator-obsidian/master/model/cnn.onnx', {
+        'https://raw.githubusercontent.com/booogieeee/drawculator-obsidian/master/model/cnn_single.onnx', {
         executionProviders: ['wasm']
     });
 
