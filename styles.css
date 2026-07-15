@@ -6,3 +6,37 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+.workspace-leaf-content[data-type="excalidraw"] .view-content {
+    position: relative;
+}
+.feedback-btn {
+    display: flex;
+    position: fixed;
+
+    height: 40px;
+    width: 75px;
+
+    z-index: 100;
+    border-radius: 7px;
+    background-color: var(--interactive-normal);
+    color: var(--text-muted);
+    border: 1px solid var(--background-modifier-border);
+    box-shadow: var(--input-shadow);
+    transition: transform 0.1s ease;
+
+    button {
+        width: 50%;
+        height: 100%;
+        border-radius: 0px;
+    }
+    
+    button:first-child {
+        border-top-left-radius: 15%;
+        border-bottom-left-radius: 15%;
+    }
+
+    button:last-child {
+        border-top-right-radius: 15%;
+        border-bottom-right-radius: 15%;
+    }
+}

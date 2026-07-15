@@ -1,4 +1,4 @@
-import { ExcalidrawElement } from "./ExcalidrawAutomate"
+import { ExcalidrawAutomate, ExcalidrawElement } from "./ExcalidrawAutomate"
 
 
 interface Point {
@@ -13,10 +13,13 @@ interface BoundingBox {
     maxY: number
 }
 
-interface Symbol {
-    points: Point[]
+export interface Symbol {
+    id: string
     bounds: BoundingBox
-    merged?: boolean
+    points?: Point[]
+    children?: Symbol[]
+    prediction?: string //eventually will be available
+    done?: boolean //prevents element from being predicted again
 }
 
 
@@ -26,14 +29,15 @@ interface Symbol {
  * @returns normalized Symbol element
  */
 export function normalizeElement(element: ExcalidrawElement) : Symbol {
-    const newPoints = element.points.map(([px, py] : [number, number]) => ({
+    const newPoints: Point[] | undefined = element.points?.map(([px, py] : [number, number]) => ({
             x: element.x + px,
             y: element.y + py
         }))
     
     const normalized: Symbol = {
+        id: element.id,
         points: newPoints,
-        bounds: getBounds(newPoints)
+        bounds: getBounds(element)
     }
 
 	return normalized
@@ -44,15 +48,24 @@ export function normalizeElement(element: ExcalidrawElement) : Symbol {
  * groups elements' points based on distance from each others bounding boxes
  * @param elements ungrouped, raw array of Symbols
  * @param threshold maximum distance for Symbols to be grouped
- * @returns new array of Symbols, grouped
+ * @returns new grouped Symbol (latest drawn)
  */
-export function groupBounds(elements: Symbol[], threshold: number = 100) {
-    let newElements: Symbol[] = []
+export function groupBounds(elements: Symbol[], threshold: number = 10) {
+    let i = elements.length-1
+    const thresholdY = threshold**1.67
 
-    for (let i = 0; i < elements.length; i++) {
+    const e = elements[i]!
+
+    let groupedElement: Symbol = {
+        id: e.id,
+        points: e.points ? [...e.points] : undefined,
+        bounds: e.bounds,
+        children: [e]
+    }
+    
+    while (i > 0) {
         const e = elements[i]!
-        if (i == elements.length-1) {newElements.push(e); continue}
-        const e2 = elements[i+1]!
+        const e2 = elements[i-1]!
 
         const dx = Math.max(0, 
             Math.max(e.bounds.minX - e2.bounds.maxX, e2.bounds.minX - e.bounds.maxX) //math.min(math.abs(e.bounds.... - e2.bounds....))
@@ -62,62 +75,77 @@ export function groupBounds(elements: Symbol[], threshold: number = 100) {
             Math.max(e.bounds.minY - e2.bounds.maxY, e2.bounds.minY - e.bounds.maxY)
         )
 
-        const distance = Math.sqrt(dx*dx + dy*dy)
+        //distance for general threshold, changed to seperate dx & dy to detect easier
+        // const distance = Math.sqrt(dx*dx + dy*dy)
 
-        if (distance <= threshold) {
-            e.points.push(...e2!.points)
-            e.bounds = getBounds(e.points)
-
-            if (newElements[newElements.length-1]?.merged == true) {
-                
+        if (dx <= threshold && dy <= thresholdY) {
+            groupedElement.id = e2.id
+            e2.points ? groupedElement.points?.push(...e2.points) : undefined
+            groupedElement.bounds = {
+                minX: Math.min(e.bounds.minX, e2.bounds.minX),
+                maxX: Math.max(e.bounds.maxX, e2.bounds.maxX),
+                minY: Math.min(e.bounds.minY, e2.bounds.minY),
+                maxY: Math.max(e.bounds.maxY, e2.bounds.maxY)
             }
+            groupedElement.children!.push(e2)
 
-            if (i+1 == elements.length-1) {i += 1}
+            // if (i-1 == 1) {i = 1} //forgor why this here
+        } else {
+            break
         }
-        console.log(dx, dy, distance)
-        newElements.push(e)
+        console.log(dx, dy)
+        i--
     }
 
-    return newElements
+    return groupedElement
 }
 
 
 /**
  * calculate bounding box of an array of points
  * @param points array of [x, y] coordinate points
- * @returns min/max X, min/max Y (corners)
+ * @returns min/max X, min/max Y
  */
-function getBounds(points: Point[]) {
-	const xs = points.map(p => p.x)
-	const ys = points.map(p => p.y)
+function getBounds(element: ExcalidrawElement | Symbol) {
+    console.warn(element)
+    if (!element.points || element.points.length == 0) {
+        return {
+            minX: element.x,
+            minY: element.y,
+            maxX: element.x + element.width,
+            maxY: element.y + element.height
+        }
+    } else {
+        const xs = element.points.map((p: number[]) => element.x ? p[0] + element.x : p[0])
+	    const ys = element.points.map((p: number[]) => element.y ? p[1] + element.y : p[1])
 
-	const minX = Math.min(...xs)
-	const minY = Math.min(...ys)
-	const maxX = Math.max(...xs)
-	const maxY = Math.max(...ys)
-
-	return { minX, minY, maxX, maxY }
+        return {
+            minX: Math.min(...xs),
+            minY: Math.min(...ys),
+            maxX: Math.max(...xs),
+            maxY: Math.max(...ys)
+        }
+    }
 }
 
-
-import * as ort from 'onnxruntime-web';
-
 /**
- * Converts line coordinates into an MNIST-compatible 4D ONNX Tensor.
+ * Converts line coordinates into a 4D ONNX Tensor.
  * Preserves the original aspect ratio, applies padding, and normalizes values to [0.0, 1.0].
- * * @returns An ONNX Tensor with shape [1, 1, 28, 28] ready for model evaluation.
+ * @returns An ONNX Tensor with shape [1, 1, 32, 32]
  */
-export function pointsToMnistTensor(xData: number[], yData: number[]): Float32Array {
-    const GRID_SIZE = 28;
-    const PADDING = 2; // Keep a 2-pixel safety margin from the grid edges
-    const USABLE_SIZE = GRID_SIZE - (PADDING * 2); // 24 pixels max size
+export function pointsToTensor(element: Symbol): Float32Array | null {
+    const GRID_SIZE = 32;
+    const PADDING = 6;
+    const USABLE_SIZE = GRID_SIZE - (PADDING * 2);
     
     const grid = new Uint8Array(GRID_SIZE * GRID_SIZE);
     
-    // Fallback if no lines are drawn: return an all-zero 4D tensor
-    if (xData.length === 0 || yData.length === 0) {
-        return new ort.Tensor('float32', new Float32Array(GRID_SIZE * GRID_SIZE), [1, 1, GRID_SIZE, GRID_SIZE]);
-    }
+    if (!element.points) return null
+
+    const rawPoints: [number, number][] = element.points.map(points => [points.x, points.y])
+
+    const xData = rawPoints.map(([x]) => x);
+    const yData = rawPoints.map(([, y]) => y);
 
     // 1. Find bounding box dimensions
     let xMin = xData[0], xMax = xData[0];
@@ -135,29 +163,38 @@ export function pointsToMnistTensor(xData: number[], yData: number[]): Float32Ar
     const dataWidth = (xMax - xMin) || 1;
     const dataHeight = (yMax - yMin) || 1;
 
-    // 2. Uniform scaling: Use the largest dimension to preserve aspect ratio
+    // 2. Uniform scaling
     const maxDimension = Math.max(dataWidth, dataHeight);
     const scale = USABLE_SIZE / maxDimension;
 
-    // 3. Center the drawing in the 28x28 space
+    // 3. Center the drawing
     const scaledWidth = dataWidth * scale;
     const scaledHeight = dataHeight * scale;
     const xOffset = PADDING + (USABLE_SIZE - scaledWidth) / 2;
     const yOffset = PADDING + (USABLE_SIZE - scaledHeight) / 2;
 
-    // 4. Map raw data to the centered, uniform pixel space
-    const points: { x: number; y: number }[] = [];
+    // 4. Map to pixel space
+    const pixelPoints: { x: number; y: number }[] = [];
     for (let i = 0; i < xData.length; i++) {
         const xPixel = Math.round(((xData[i] - xMin) * scale) + xOffset);
-        // Correcting Y inversion logic to map correctly inside the grid index space
         const yPixel = Math.round(((yData[i] - yMin) * scale) + yOffset);
-
-        // Clamping to completely ensure no indexes spill over grid edges (0-27)
-        points.push({
+        pixelPoints.push({
             x: Math.max(0, Math.min(GRID_SIZE - 1, xPixel)),
             y: Math.max(0, Math.min(GRID_SIZE - 1, yPixel))
         });
     }
+
+    const drawPixel = (x: number, y: number) => {
+        grid[y * GRID_SIZE + x] = 255;
+        const offsets = [[1,0],[-1,0],[0,1],[0,-1]];
+        for (const [dx, dy] of offsets) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                grid[ny * GRID_SIZE + nx] = Math.max(grid[ny * GRID_SIZE + nx], 128);
+            }
+        }
+    };
 
     // 5. Bresenham's Line Algorithm
     const drawLine = (x0: number, y0: number, x1: number, y1: number) => {
@@ -168,48 +205,112 @@ export function pointsToMnistTensor(xData: number[], yData: number[]): Float32Ar
         let err = dx - dy;
 
         while (true) {
-            const flatIndex = (y0 * GRID_SIZE) + x0;
-            grid[flatIndex] = 255;
-
+            drawPixel(x0, y0);
             if (x0 === x1 && y0 === y1) break;
-
             const e2 = 2 * err;
-            if (e2 > -dy) {
-                err -= dy;
-                x0 += sx;
-            }
-            if (e2 < dx) {
-                err += dx;
-                y0 += sy;
-            }
+            if (e2 > -dy) { err -= dy; x0 += sx; }
+            if (e2 < dx) { err += dx; y0 += sy; }
         }
     };
 
-    // 6. Connect the points sequentially using the line drawer
-    for (let i = 0; i < points.length - 1; i++) {
-        drawLine(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y);
-    }
+    // 6. Connect points
+    let offset = 0
+    const threshold = 50
 
-    // 7. ASCII Visualizer (Fixed indexing bug where y loop bounds matched out-of-index ranges)
+    element.children?.forEach((e, i) => {
+        if (e.points) {
+            for (let i = 0; i < e.points.length - 1; i++) {
+                drawLine(pixelPoints[i + offset].x, pixelPoints[i + offset].y, pixelPoints[i + offset + 1].x, pixelPoints[i + offset + 1].y);
+            }
+            offset += e.points.length
+        }
+    })
+
+    if (Math.max(element.bounds.maxX - element.bounds.minX, element.bounds.maxY - element.bounds.minY) < threshold) {
+        for (let y = 0; y < GRID_SIZE; y++) {
+            let minX = -1, maxX = -1
+            for (let x = 0; x < GRID_SIZE; x++) {
+                if (grid[y * GRID_SIZE + x] > 0) {0
+                    if (minX === -1) minX = x
+                    maxX = x
+                }
+            }
+            if (minX !== -1) {
+                for (let x = minX; x <= maxX; x++) {
+                    grid[y * GRID_SIZE + x] = 255
+                }
+            }
+        }
+    }
+    
+    
+
+    // 7. ASCII Visualizer
     let asciiGrid = "";
     for (let y = 0; y < GRID_SIZE; y++) {
         let row = "";
         for (let x = 0; x < GRID_SIZE; x++) {
-            const flatIndex = (y * GRID_SIZE) + x;
-            row += grid[flatIndex] > 128 ? "██" : "  ";
+            row += grid[y * GRID_SIZE + x] > 128 ? "██" : "  ";
         }
         asciiGrid += row + "\n";
     }
-    console.log("%cMNIST Matrix Visualisation:", "font-weight: bold; color: #4af626;");
+    console.log("%cModel Matrix Visualisation:", "font-weight: bold; color: #4af626;");
     console.log(asciiGrid);
 
-    // 8. CONVERT & NORMALIZE FOR CNN
-    // ONNX expects float32 array elements bounded between [0.0, 1.0]
+    // 8. MODIFIED: Adjusted to 32x32 size and updated to use custom (0.5, 0.5) normalization
     const floatBuffer = new Float32Array(GRID_SIZE * GRID_SIZE);
     for (let i = 0; i < grid.length; i++) {
-        floatBuffer[i] = grid[i] / 255.0;
+        // Normalization Formula: (PixelValue / 255.0 - Mean) / Std
+        // (PixelValue / 255.0 - 0.5) / 0.5
+        floatBuffer[i] = (grid[i] / 255.0 - 0.5) / 0.5;
     }
 
-    // 9. RETURN AS 4D TENSOR: [Batch Size, Channels, Height, Width]
     return floatBuffer;
+}
+
+
+function findElementInBounds(elements: Map<Symbol["id"], Symbol>, bounds: BoundingBox) {
+    let inBounds: Symbol[] = []
+
+    elements.forEach(e => {
+        if (
+            (e.bounds.minX < bounds.maxX && e.bounds.maxX > bounds.minX) && 
+            (e.bounds.minY < bounds.maxY && e.bounds.maxY > bounds.minY)
+        ) {
+            inBounds.push(e)
+        }
+    });
+
+    return inBounds
+}
+
+
+export function assembleEquation(elements: Map<Symbol["id"], Symbol>, e: Symbol, ea?: ExcalidrawAutomate): Set<Symbol> {
+    //expand bound box to left until nothing in it
+    const RANGE = 250 //# of pixels to go in x & y (centered y)
+    let i = 1
+
+    let found = []
+    let inBounds: Set<Symbol> = new Set()
+
+    ea?.reset()
+    do {
+        const box: BoundingBox = {
+            maxX: e.bounds.minX - RANGE*(i-1) - 5,
+            minX: e.bounds.minX - RANGE*i,
+            minY: e.bounds.minY - (RANGE/2)*i*0.2,
+            maxY: e.bounds.maxY + (RANGE/2)*i*0.2,
+        }
+        console.warn(box)
+        found = findElementInBounds(elements, box)
+        found.forEach(e => inBounds.add(e))
+
+        ea?.setView()
+        ea?.addRect(box.minX, box.minY, (box.maxX-box.minX), (box.maxY-box.minY))
+        ea?.addElementsToView()
+
+        i++
+    } while (found.length > 0 && i < 10); //limit on iterations
+    
+    return inBounds
 }
