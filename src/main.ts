@@ -16,6 +16,9 @@ import {
 	MyPluginSettings,
 	SampleSettingTab,
 } from './settings';
+import { ComputeEngine } from '@cortex-js/compute-engine';
+
+
 import { ExcalidrawAutomate, ExcalidrawElement } from './ExcalidrawAutomate.d';
 import * as utils from './utils'
 import * as model from './model'
@@ -219,7 +222,9 @@ export default class MyPlugin extends Plugin {
 
 					const expressionString = expression.join("")
 					console.log("expression: ", expressionString)
-					const solution: number = eval(expressionString)
+
+					const ce = new ComputeEngine()
+					const solution = ce.parse(expressionString).solve()
 					console.log("SOLUTION: ", solution)
 
 					ea.reset()
