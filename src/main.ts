@@ -20,6 +20,7 @@ import { ComputeEngine } from '@cortex-js/compute-engine';
 
 
 import { ExcalidrawAutomate, ExcalidrawElement } from './ExcalidrawAutomate.d';
+import { Symbol } from './utils';
 import * as utils from './utils'
 import * as model from './model'
 
@@ -173,7 +174,7 @@ export default class MyPlugin extends Plugin {
 	private DEFS: Record<string, string> = {
 		'add': '+', 'dec': '.', 'div': '/', 'eq': '=', 'mul': '*', 'sub': '-'
 	}
-	grouped: Map<utils.Symbol["id"], utils.Symbol> = new Map()
+	grouped: Map<Symbol["id"], Symbol> = new Map()
 
 	private handler = (ea: ExcalidrawAutomate /**elements: ExcalidrawElement[]**/) => {
 		const elements: ExcalidrawElement[] = ea.getViewElements()
@@ -203,38 +204,93 @@ export default class MyPlugin extends Plugin {
 			if (predicted == '=') {
 				element.done = true
 
-				const found = Array.from(utils.assembleEquation(this.grouped, element, ea)).sort((a, b) => {
-					return a.bounds.minX < b.bounds.minX ? -1 : 1
-				})
+				const found = utils.findElementsLeft({ elements: this.grouped, e: element, ea: ea })
 				console.log('FOUND EXPRESSION: ', found)
 
 				if (found.length > 0) {
-					let expression: string[] = []
-					found.forEach(e => {
-						ea.reset()
-						ea.addRect(e.bounds.minX, e.bounds.minY, (e.bounds.maxX-e.bounds.minX), (e.bounds.maxY-e.bounds.minY))
-						ea.addElementsToView()
 
-						expression.push(e.prediction!)
+					//fraction detection
+					const fractions: { id: string, numerator: Symbol[], denominator: Symbol[] }[] = []
+					const consumed = new Set<string>() // ids of every element absorbed into some fraction
+
+					for (let i = 0; i <= found.length-1; i++) {
+						const e = found[i]!
+						if (e.prediction !== "-") continue
+						
+						const searchElementDown = {...e, bounds: {...e.bounds}}
+						searchElementDown.bounds.minY = e.bounds.maxY + 100 
+						searchElementDown.bounds.maxY =  searchElementDown.bounds.minY + 10
+						searchElementDown.bounds.maxX += 55
+						searchElementDown.bounds.minX = searchElementDown.bounds.maxX - 50
+
+						const searchElementUp = {...e, bounds: {...e.bounds}}
+						searchElementUp.bounds.minY = e.bounds.minY - 100
+						searchElementUp.bounds.maxY = searchElementUp.bounds.minY + 10
+						searchElementUp.bounds.maxX += 55
+						searchElementUp.bounds.minX = searchElementUp.bounds.maxX - 50
+
+						const width = e.bounds.maxX - e.bounds.minX
+						const foundUp = utils.findElementsLeft({ elements: this.grouped, e: searchElementUp, range: width, rangeY: 75, limit: 1, ea: ea })
+						const foundDown = utils.findElementsLeft({ elements: this.grouped, e: searchElementDown, range: width, rangeY: 75, limit: 1, ea: ea }) // fraction detection
+						
+						
+
+						if (foundUp.length > 0 && foundDown.length > 0) {
+							fractions.push({ id: e.id, numerator: foundUp, denominator: foundDown })
+							consumed.add(e.id)
+							for (const el of [...foundUp, ...foundDown]) consumed.add(el.id)
+						}
+					}
+
+					const fractionMap = new Map(fractions.map(f => [f.id, f]))
+
+					// assemble equation
+					let expression: string[] = []
+					for (let i = 0; i <= found.length-1; i++) {
+						const e = found[i]!
+						
+						// changing prediction a bit here
+						const e2 = found[i-1]
+						console.warn(e.prediction, e2?.prediction)
+						if (consumed.has(e.id) && !fractionMap.has(e.id)) continue
+
+						if (fractionMap.has(e.id)) {
+							const { numerator, denominator } = fractionMap.get(e.id)!
+							const num = numerator.map((el, i) => this.transformPrediction(el, numerator[i-1])).join("")
+							const den = denominator.map((el, i) => this.transformPrediction(el, denominator[i-1])).join("")
+							expression.push(`((${num})/(${den}))`)
+							continue
+						}
+
+						expression.push(this.transformPrediction(e, e2))
 
 						console.log(`BOUNDS: ${(e.bounds.maxX-e.bounds.minX)}, ${(e.bounds.maxY-e.bounds.minY)}`)
-					});
+					}
 
 					const expressionString = expression.join("")
 					console.log("expression: ", expressionString)
 
-					const ce = new ComputeEngine()
-					const solution = ce.parse(expressionString).solve()
+					const parsed = (new ComputeEngine()).parse(expressionString)
+					const simplified = parsed.evaluate()
+					console.log("SIMPLIFIED: ", simplified.toString())
+					const solution = parsed.solve()
 					console.log("SOLUTION: ", solution)
 
 					ea.reset()
 
-					const firstFound = found[found.length-1]!
-					const height = (firstFound.bounds.maxY - firstFound.bounds.minY)*1.4
-					ea.style.fontSize = (ea.style.fontSize / 25) * height //size calculation
+					let firstFound = found[found.length-1]
+					if (found[found.length-2] && found[found.length-2]!.bounds.maxY - found[found.length-2]!.bounds.minY > found[found.length-1]!.bounds.maxY - found[found.length-1]!.bounds.minY) {
+						firstFound = found[found.length-2]
+					} //idk why i did this
+
+					const height = (firstFound.bounds.maxY - firstFound.bounds.minY)*1.4 //100
+					ea.style.fontSize = Math.max(96, (ea.style.fontSize / 25) * height) //size calculation
 					ea.style.opacity = 50
 					
-					const addedId = ea.addText(element.bounds.maxX + (element.bounds.minX - firstFound.bounds.maxX)/1.367, (firstFound.bounds.maxY + firstFound.bounds.minY)/2 - height/2.5, solution.toString())
+					const addedId = ea.addText(element.bounds.maxX + (element.bounds.minX - found[found.length-1]!.bounds.maxX)/1.367,
+						(element.bounds.maxY + element.bounds.minY)/2 - (firstFound.bounds.maxY - firstFound.bounds.minY)/2 - height/5.67,
+						simplified.toString() + (solution != null ? ', x = ' + solution.toString() : ""))
+					
 					ea.addElementsToView()
 
 					this.buttonElement!.style.left = `${this.currentMouse.x}px`
@@ -264,6 +320,23 @@ export default class MyPlugin extends Plugin {
 		}) : null
 		// console.log("GROUPED:", grouped)
 	}
+
+
+	transformPrediction(e: Symbol, prev: Symbol | undefined): string {
+		if (e.prediction == "*") { //change x multiplication to x variable
+			e.prediction = "x"
+		} else if (prev && e.prediction == "." && // dot and multiplication detection
+			(Math.abs((prev.bounds.maxY + prev.bounds.minY) /2 - (e.bounds.maxY + e.bounds.minY) /2)) < 70) {
+				e.prediction = "*"
+		} else if (prev && Number(e.prediction!) &&  // powers detection
+			e.bounds.maxY < (prev.bounds.maxY + prev.bounds.minY)/2 &&
+			e.bounds.minY > prev.bounds.minY - (prev.bounds.maxY - prev.bounds.minY)) {
+				e.prediction = "^" + e.prediction
+		}
+
+		return e.prediction!
+	}
+
 
 	handleCanvasChange(ea: ExcalidrawAutomate) {
 		for (const unsub of this.unsub) {

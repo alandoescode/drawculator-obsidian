@@ -164,8 +164,11 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
     const dataHeight = (yMax - yMin) || 1;
 
     // 2. Uniform scaling
+    // const maxDimension = Math.max(dataWidth, dataHeight);
+    // const scale = USABLE_SIZE / maxDimension;
+    const SOFTENING = 70
     const maxDimension = Math.max(dataWidth, dataHeight);
-    const scale = USABLE_SIZE / maxDimension;
+    const scale = USABLE_SIZE / (maxDimension + SOFTENING);
 
     // 3. Center the drawing
     const scaledWidth = dataWidth * scale;
@@ -215,7 +218,7 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
 
     // 6. Connect points
     let offset = 0
-    const threshold = 50
+    const threshold = 30
 
     element.children?.forEach((e, i) => {
         if (e.points) {
@@ -284,33 +287,52 @@ function findElementInBounds(elements: Map<Symbol["id"], Symbol>, bounds: Boundi
     return inBounds
 }
 
-
-export function assembleEquation(elements: Map<Symbol["id"], Symbol>, e: Symbol, ea?: ExcalidrawAutomate): Set<Symbol> {
+/**
+ * find elements to the left of given element (for assembling equations)
+ * stops when no elements found in range or limit hit
+ * 
+ * @param elements list of all elements
+ * @param e given element
+ * @param limit how many boxes to go left by, default = 10
+ * @param range box width, default  =250
+ * @param ea show bounding boxes (debug)
+ * @returns set of found elements (SORTED BY MAX X)
+ */
+export function findElementsLeft(
+    { elements, e, limit = 10, range = 250, rangeY, ea } : { 
+    elements: Map<Symbol["id"], Symbol>, e: Symbol, limit?: number, range?: number, rangeY?: number, ea?: ExcalidrawAutomate 
+}): Array<Symbol> {
     //expand bound box to left until nothing in it
-    const RANGE = 250 //# of pixels to go in x & y (centered y)
     let i = 1
 
     let found = []
     let inBounds: Set<Symbol> = new Set()
 
+    rangeY = rangeY ? rangeY : range*2
+
     ea?.reset()
     do {
         const box: BoundingBox = {
-            maxX: e.bounds.minX - RANGE*(i-1) - 5,
-            minX: e.bounds.minX - RANGE*i,
-            minY: e.bounds.minY - (RANGE/2)*i*0.2,
-            maxY: e.bounds.maxY + (RANGE/2)*i*0.2,
+            maxX: e.bounds.minX - range*(i-1) - 5,
+            minX: e.bounds.minX - range*i,
+            minY: e.bounds.minY - rangeY,
+            maxY: e.bounds.maxY + rangeY,
         }
-        console.warn(box)
         found = findElementInBounds(elements, box)
-        found.forEach(e => inBounds.add(e))
+        found.forEach(e => {
+            inBounds.add(e)
+            ea?.addRect(e.bounds.minX, e.bounds.minY, (e.bounds.maxX-e.bounds.minX), (e.bounds.maxY-e.bounds.minY))
+        })
 
         ea?.setView()
         ea?.addRect(box.minX, box.minY, (box.maxX-box.minX), (box.maxY-box.minY))
+		
         ea?.addElementsToView()
 
         i++
-    } while (found.length > 0 && i < 10); //limit on iterations
+    } while (found.length > 0 && i < limit); //limit on iterations
     
-    return inBounds
+    const inBoundsSorted = Array.from(inBounds).sort((a, b) => a.bounds.maxX - b.bounds.maxX)
+    
+    return inBoundsSorted
 }
