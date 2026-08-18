@@ -9,8 +9,12 @@ const DEFS: Record<number, string> = {
 
 
 export async function initModel() {
+    const response = await fetch("https://huggingface.co/booogiee/math_cnn/resolve/main/cnn_single.onnx")
+
+    const modelBuffer = await response.arrayBuffer()
+
     const session = await ort.InferenceSession.create(
-        'https://huggingface.co/booogiee/math_cnn/resolve/main/cnn_single.onnx', {
+        modelBuffer, {
         executionProviders: ['wasm']
     });
 
@@ -27,7 +31,7 @@ export async function runModel(session: ort.InferenceSession, inputData: Float32
     const tensor = new ort.Tensor('float32', inputData, [1, 1, 32, 32])
 
     const results = await session.run({ input: tensor })
-    console.log("RESUTLS: ", results)
+    // console.log("RESUTLS: ", results)
     const output = results.output?.data as Float32Array
 
     const predicted = output!.indexOf(Math.max(...output))

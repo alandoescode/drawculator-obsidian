@@ -93,7 +93,7 @@ export function groupBounds(elements: Symbol[], threshold: number = 10) {
         } else {
             break
         }
-        console.log(dx, dy)
+        // console.log(dx, dy)
         i--
     }
 
@@ -296,8 +296,8 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
         }
         asciiGrid += row + "\n";
     }
-    console.log("%cModel Matrix Visualisation:", "font-weight: bold; color: #4af626;");
-    console.log(asciiGrid);
+    // console.log("%cModel Matrix Visualisation:", "font-weight: bold; color: #4af626;");
+    // console.log(asciiGrid);
 
     // 8. MODIFIED: Adjusted to 32x32 size and updated to use custom (0.5, 0.5) normalization
     const floatBuffer = new Float32Array(GRID_SIZE * GRID_SIZE);

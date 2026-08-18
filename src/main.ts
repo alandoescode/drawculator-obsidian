@@ -51,7 +51,7 @@ export default class MyPlugin extends Plugin {
 				this.registerEvent(
 					this.app.workspace.on('active-leaf-change', 
 						(leaf: WorkspaceLeaf) => {
-							console.log("boggie woogie")
+							// console.log("boggie woogie")
 
 							const activeView = leaf?.view
 
@@ -90,7 +90,7 @@ export default class MyPlugin extends Plugin {
 			text: "no",
 		})
 
-		console.log("THE BUTTON IS HEREE")
+		// console.log("THE BUTTON IS HEREE")
 
 		return this.buttonElement
 	}
@@ -103,10 +103,10 @@ export default class MyPlugin extends Plugin {
 
 	private handler = (ea: ExcalidrawAutomate /**elements: ExcalidrawElement[]**/, session: InferenceSession) => {
 		const elements: readonly ExcalidrawElement[] = ea.getViewElements()
-		console.log("ELEMENTS:", elements)
+		// console.log("ELEMENTS:", elements)
 		const strokes = elements.filter(element => (element.type === "freedraw" || element.type === "text") && element.isDeleted === false)
 		
-		if (strokes.length <= 0) {console.log("nothing to predict"); return}
+		if (strokes.length <= 0) {/*console.log("nothing to predict");*/ return}
 		const element = utils.groupBounds( //most recent grouped element
 			strokes.map((e) => utils.normalizeElement(e))
 		)
@@ -114,8 +114,8 @@ export default class MyPlugin extends Plugin {
 		if (this.grouped.get(element.id)?.done) return
 		this.grouped.set(element.id, element) //push most recent grouped element to global array of grouped elements
 		
-		console.log(strokes[strokes.length-1]?.points ?? null)
-		console.log("STROKES:", strokes)
+		// console.log(strokes[strokes.length-1]?.points ?? null)
+		// console.log("STROKES:", strokes)
 		
 		element.points ? model.runModel(session, utils.pointsToTensor(element)!).then(predicted => {
 
@@ -123,14 +123,14 @@ export default class MyPlugin extends Plugin {
 				predicted = this.DEFS[predicted]!
 			}
 
-			console.log('Predicted digit: ', predicted)
+			// console.log('Predicted digit: ', predicted)
 			element.prediction = predicted
 
 			if (predicted == '=') {
 				element.done = true
 
 				const found = utils.findElementsLeft({ elements: this.grouped, e: element, ea: ea })
-				console.log('FOUND EXPRESSION: ', found)
+				// console.log('FOUND EXPRESSION: ', found)
 
 				if (found.length > 0) {
 
@@ -172,28 +172,28 @@ export default class MyPlugin extends Plugin {
 
 						expression.push(this.transformPrediction(e, e2))
 
-						console.log(`BOUNDS: ${(e.bounds.maxX-e.bounds.minX)}, ${(e.bounds.maxY-e.bounds.minY)}`)
+						// console.log(`BOUNDS: ${(e.bounds.maxX-e.bounds.minX)}, ${(e.bounds.maxY-e.bounds.minY)}`)
 					}
 
 					const expressionString = expression.join("")
-					console.log("expression: ", expressionString)
+					// console.log("expression: ", expressionString)
 
 					const ce = new ComputeEngine()
 					const parsed = ce.parse(expressionString)
 
 					const simplified = ce.expr(parsed.evaluate())
-					console.log("SIMPLIFIED: ", simplified.latex)
+					// console.log("SIMPLIFIED: ", simplified.latex)
 
 					const solved = parsed.solve()
 					const solution = solved ? ce.expr(solved) : null
-					console.log("SOLUTION: ", solution?.latex)
+					// console.log("SOLUTION: ", solution?.latex)
 
 					ea.reset()
 
 					let firstFound = found[found.length-1]
 					if (found[found.length-2] && found[found.length-2]!.bounds.maxY - found[found.length-2]!.bounds.minY > found[found.length-1]!.bounds.maxY - found[found.length-1]!.bounds.minY) {
 						firstFound = found[found.length-2]
-					} //idk why i did this
+					} //idk why i did this but ill keep it here
 
 					const height = (firstFound!.bounds.maxY - firstFound!.bounds.minY)*1.4 //100
 					ea.style.fontSize = Math.max(96, (ea.style.fontSize / 25) * height)/18.67 //size calculation
@@ -204,16 +204,16 @@ export default class MyPlugin extends Plugin {
 						(element.bounds.maxY + element.bounds.minY)/2 - (firstFound!.bounds.maxY - firstFound!.bounds.minY)/2 - height/16.67,
 						(solution?.latex != null ? 'x = ' + solution.latex + ", " : "") + simplified.latex, ea.style.fontSize, ea.style.fontSize
 					).then(addedId => {
-							console.log(addedId)
+							// console.log(addedId)
 							const el = ea.getElement(addedId);
-							console.log("Element object:", el);
-							console.log("Is rendered in view:", ea.getViewElements().some(e => e.id === addedId));
+							// console.log("Element object:", el);
+							// console.log("Is rendered in view:", ea.getViewElements().some(e => e.id === addedId));
 							
 							ea.addElementsToView()
 
 							window.onmousedown = (mouseEvent => {
 								if ((mouseEvent.target as HTMLElement).parentElement!.classList.contains("feedback-btn")) {
-									console.log(mouseEvent.target)
+									// console.log(mouseEvent.target)
 									
 									const clicked = mouseEvent.target as HTMLElement
 									if (clicked.textContent == "yes") {
@@ -304,7 +304,7 @@ export default class MyPlugin extends Plugin {
 				}
 			})
 
-			console.log("grouped: ", this.grouped)
+			// console.log("grouped: ", this.grouped)
 		}, 100, true)))
 	}
 	onunload() {}

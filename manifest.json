@@ -1,11 +1,9 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "drawculator-obsidian",
+	"name": "drawculator",
 	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
-	"isDesktopOnly": false
+	"minAppVersion": "1.13.0",
+	"description": "Calculates math equations & expressions drawn in Excalidraw",
+	"author": "ninjaturtle",
+	"isDesktopOnly": true
 }
