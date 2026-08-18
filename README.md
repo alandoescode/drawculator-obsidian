@@ -29,7 +29,8 @@ Draw mathematical expressions in Obsidian and watch them solve themselves! Drawc
 ## Requirements
 
 - **Obsidian**
-- **Excalidraw Plugin** for Obsidian
+- **Excalidraw Plugin** for the drawing
+- **Excalidraw Extras Plugin** for latex text
 
 ## Installation
 
