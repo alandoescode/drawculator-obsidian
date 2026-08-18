@@ -107,7 +107,7 @@ export function groupBounds(elements: Symbol[], threshold: number = 10) {
  * @returns min/max X, min/max Y
  */
 function getBounds(element: ExcalidrawElement | Symbol) {
-    console.warn(element)
+    // console.warn(element)
     if (!element.points || element.points.length == 0) {
         return {
             minX: element.x,
@@ -347,9 +347,9 @@ export function findElementsLeft(
     let found = []
     let inBounds: Set<Symbol> = new Set()
 
-    rangeY = rangeY ? rangeY : range*2
+    rangeY = rangeY ?? range*1.5
 
-    ea?.reset()
+    ea?.setView()
     do {
         const box: BoundingBox = {
             maxX: e.bounds.minX - range*(i-1) - 5,
@@ -360,13 +360,13 @@ export function findElementsLeft(
         found = findElementInBounds(elements, box)
         found.forEach(e => {
             inBounds.add(e)
-            ea?.addRect(e.bounds.minX, e.bounds.minY, (e.bounds.maxX-e.bounds.minX), (e.bounds.maxY-e.bounds.minY))
+            // ea?.addRect(e.bounds.minX, e.bounds.minY, (e.bounds.maxX-e.bounds.minX), (e.bounds.maxY-e.bounds.minY))
         })
 
-        ea?.setView()
-        ea?.addRect(box.minX, box.minY, (box.maxX-box.minX), (box.maxY-box.minY))
+        // ea?.addRect(box.minX, box.minY, (box.maxX-box.minX), (box.maxY-box.minY))
 		
-        ea?.addElementsToView()
+        // ea?.addElementsToView()
+        // console.log("added elements: ", [box.minX, box.minY, (box.maxX-box.minX), (box.maxY-box.minY)])
 
         i++
     } while (found.length > 0 && i < limit); //limit on iterations

@@ -35,10 +35,10 @@ Draw mathematical expressions in Obsidian and watch them solve themselves! Drawc
 ## Installation
 
 ### Automatic
-if it's approved to be on obsidian community plugins:
 1. Find the **Community plugins** tab under obsidian settings
 2. Search for 'drawculator for Excalidraw'
 3. Install & reload Obsidian
+4. Enable the plugin in **Settings → Community plugins** if needed
 
 ### Manual
 1. Download the latest release from GitHub

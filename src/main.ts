@@ -28,7 +28,7 @@ declare module 'obsidian' {
 
 
 
-export default class MyPlugin extends Plugin {
+export default class Drawculator extends Plugin {
 	loadedState = false
 	loadedEl: HTMLElement | undefined
 	settings!: {mySetting: string};
@@ -44,7 +44,9 @@ export default class MyPlugin extends Plugin {
 			if (ea) {
 				console.log("excalidraw detected!")
 				const button = this.createButton()
-				button.style.visibility = "hidden"
+				button.setCssStyles({
+					visibility: 'hidden'
+				})
 
 				this.loadedEl = this.addStatusBarItem()
 
@@ -159,7 +161,7 @@ export default class MyPlugin extends Plugin {
 						
 						// changing prediction a bit here
 						const e2 = found[i-1]
-						console.warn(e.prediction, e2?.prediction)
+						// console.warn(e.prediction, e2?.prediction)
 						if (consumed.has(e.id) && !fractionMap.has(e.id)) continue
 
 						if (fractionMap.has(e.id)) {
@@ -188,8 +190,6 @@ export default class MyPlugin extends Plugin {
 					const solution = solved ? ce.expr(solved) : null
 					// console.log("SOLUTION: ", solution?.latex)
 
-					ea.reset()
-
 					let firstFound = found[found.length-1]
 					if (found[found.length-2] && found[found.length-2]!.bounds.maxY - found[found.length-2]!.bounds.minY > found[found.length-1]!.bounds.maxY - found[found.length-1]!.bounds.minY) {
 						firstFound = found[found.length-2]
@@ -197,7 +197,6 @@ export default class MyPlugin extends Plugin {
 
 					const height = (firstFound!.bounds.maxY - firstFound!.bounds.minY)*1.4 //100
 					ea.style.fontSize = Math.max(96, (ea.style.fontSize / 25) * height)/18.67 //size calculation
-					ea.style.opacity = 50
 					
 					ea.addLaTex(
 						element.bounds.maxX + (element.bounds.minX - found[found.length-1]!.bounds.maxX)/1.367,
@@ -205,11 +204,16 @@ export default class MyPlugin extends Plugin {
 						(solution?.latex != null ? 'x = ' + solution.latex + ", " : "") + simplified.latex, ea.style.fontSize, ea.style.fontSize
 					).then(addedId => {
 							// console.log(addedId)
-							const el = ea.getElement(addedId);
+							
 							// console.log("Element object:", el);
 							// console.log("Is rendered in view:", ea.getViewElements().some(e => e.id === addedId));
 							
 							ea.addElementsToView()
+							const el = ea.getElement(addedId);
+							el.opacity = 50
+							
+
+							
 
 							window.onmousedown = (mouseEvent => {
 								if ((mouseEvent.target as HTMLElement).parentElement!.classList.contains("feedback-btn")) {
@@ -217,16 +221,20 @@ export default class MyPlugin extends Plugin {
 									
 									const clicked = mouseEvent.target as HTMLElement
 									if (clicked.textContent == "yes") {
-										ea.getElement(addedId).opacity = 100
+										el.opacity = 100
 										ea.viewUpdateScene({ elements: ea.getViewElements() })
 									} else {
 										ea.deleteViewElements([ea.getElement(addedId)])
 									}
 									
-									this.buttonElement!.style.visibility = "hidden"
-								} else if (!ea.getElement(addedId).isDeleted && ea.getElement(addedId).opacity == 50) {
-									ea.deleteViewElements([ea.getElement(addedId)])
-									this.buttonElement!.style.visibility = "hidden"
+									this.buttonElement!.setCssStyles({
+										visibility: 'hidden'
+									})
+								} else if (!el.isDeleted && el.opacity == 50) {
+									ea.deleteViewElements([el])
+									this.buttonElement!.setCssStyles({
+										visibility: 'hidden'
+									})
 								}
 							})
 						}
@@ -237,7 +245,9 @@ export default class MyPlugin extends Plugin {
 					this.buttonElement!.style.left = `${this.currentMouse.x}px`
 					this.buttonElement!.style.top = `${this.currentMouse.y}px`
 					
-					this.buttonElement!.style.visibility = "visible"
+					this.buttonElement!.setCssStyles({
+						visibility: 'visible'
+					})
 					
 				}
 			}

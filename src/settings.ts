@@ -1,5 +1,5 @@
 // import { App, PluginSettingTab, Setting } from 'obsidian';
-// import MyPlugin from './main';
+// import Drawculator from './main';
 
 // export interface MyPluginSettings {
 // 	mySetting: string;
@@ -10,9 +10,9 @@
 // };
 
 // export class SampleSettingTab extends PluginSettingTab {
-// 	plugin: MyPlugin;
+// 	plugin: Drawculator;
 
-// 	constructor(app: App, plugin: MyPlugin) {
+// 	constructor(app: App, plugin: Drawculator) {
 // 		super(app, plugin);
 // 		this.plugin = plugin;
 // 	}
