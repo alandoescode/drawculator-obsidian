@@ -128,6 +128,45 @@ function getBounds(element: ExcalidrawElement | Symbol) {
     }
 }
 
+
+export function findFractionOperands(grouped: Map<Symbol["id"], Symbol>, bar: Symbol) {
+    const barWidth = Math.max(1, bar.bounds.maxX - bar.bounds.minX)
+    const horizontalPadding = Math.max(30, barWidth * 0.75)
+    const verticalPadding = Math.max(80, barWidth * 1.25)
+
+    const xMin = bar.bounds.minX - horizontalPadding
+    const xMax = bar.bounds.maxX + horizontalPadding
+
+    const numerator = Array.from(grouped.values())
+        .filter((el) =>
+            el.id !== bar.id &&
+            el.bounds.maxY <= bar.bounds.minY &&
+            bar.bounds.minY - el.bounds.maxY <= verticalPadding &&
+            isWithinHorizontalRange(el, xMin, xMax),
+        )
+        .sort((a, b) => a.bounds.minX - b.bounds.minX)
+
+    const denominator = Array.from(grouped.values())
+        .filter((el) =>
+            el.id !== bar.id &&
+            el.bounds.minY >= bar.bounds.maxY &&
+            el.bounds.minY - bar.bounds.maxY <= verticalPadding &&
+            isWithinHorizontalRange(el, xMin, xMax),
+        )
+        .sort((a, b) => a.bounds.minX - b.bounds.minX)
+
+    if (numerator.length === 0 || denominator.length === 0) {
+        return null
+    }
+
+    return { numerator, denominator }
+}
+
+function isWithinHorizontalRange(el: Symbol, xMin: number, xMax: number) {
+    return el.bounds.maxX >= xMin && el.bounds.minX <= xMax
+}
+
+
 /**
  * Converts line coordinates into a 4D ONNX Tensor.
  * Preserves the original aspect ratio, applies padding, and normalizes values to [0.0, 1.0].
@@ -152,16 +191,16 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
     let yMin = yData[0], yMax = yData[0];
 
     for (let i = 1; i < xData.length; i++) {
-        if (xData[i] < xMin) xMin = xData[i];
-        if (xData[i] > xMax) xMax = xData[i];
+        if (xData[i]! < xMin!) xMin = xData[i];
+        if (xData[i]! > xMax!) xMax = xData[i];
     }
     for (let i = 1; i < yData.length; i++) {
-        if (yData[i] < yMin) yMin = yData[i];
-        if (yData[i] > yMax) yMax = yData[i];
+        if (yData[i]! < yMin!) yMin = yData[i];
+        if (yData[i]! > yMax!) yMax = yData[i];
     }
 
-    const dataWidth = (xMax - xMin) || 1;
-    const dataHeight = (yMax - yMin) || 1;
+    const dataWidth = (xMax! - xMin!) || 1;
+    const dataHeight = (yMax! - yMin!) || 1;
 
     // 2. Uniform scaling
     // const maxDimension = Math.max(dataWidth, dataHeight);
@@ -179,8 +218,8 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
     // 4. Map to pixel space
     const pixelPoints: { x: number; y: number }[] = [];
     for (let i = 0; i < xData.length; i++) {
-        const xPixel = Math.round(((xData[i] - xMin) * scale) + xOffset);
-        const yPixel = Math.round(((yData[i] - yMin) * scale) + yOffset);
+        const xPixel = Math.round(((xData[i]! - xMin!) * scale) + xOffset);
+        const yPixel = Math.round(((yData[i]! - yMin!) * scale) + yOffset);
         pixelPoints.push({
             x: Math.max(0, Math.min(GRID_SIZE - 1, xPixel)),
             y: Math.max(0, Math.min(GRID_SIZE - 1, yPixel))
@@ -191,10 +230,10 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
         grid[y * GRID_SIZE + x] = 255;
         const offsets = [[1,0],[-1,0],[0,1],[0,-1]];
         for (const [dx, dy] of offsets) {
-            const nx = x + dx;
-            const ny = y + dy;
+            const nx = x + dx!;
+            const ny = y + dy!;
             if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-                grid[ny * GRID_SIZE + nx] = Math.max(grid[ny * GRID_SIZE + nx], 128);
+                grid[ny * GRID_SIZE + nx] = Math.max(grid[ny * GRID_SIZE + nx]!, 128);
             }
         }
     };
@@ -223,7 +262,7 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
     element.children?.forEach((e, i) => {
         if (e.points) {
             for (let i = 0; i < e.points.length - 1; i++) {
-                drawLine(pixelPoints[i + offset].x, pixelPoints[i + offset].y, pixelPoints[i + offset + 1].x, pixelPoints[i + offset + 1].y);
+                drawLine(pixelPoints[i + offset]!.x, pixelPoints[i + offset]!.y, pixelPoints[i + offset + 1]!.x, pixelPoints[i + offset + 1]!.y);
             }
             offset += e.points.length
         }
@@ -233,7 +272,7 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
         for (let y = 0; y < GRID_SIZE; y++) {
             let minX = -1, maxX = -1
             for (let x = 0; x < GRID_SIZE; x++) {
-                if (grid[y * GRID_SIZE + x] > 0) {0
+                if (grid[y * GRID_SIZE + x]! > 0) {0
                     if (minX === -1) minX = x
                     maxX = x
                 }
@@ -253,7 +292,7 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
     for (let y = 0; y < GRID_SIZE; y++) {
         let row = "";
         for (let x = 0; x < GRID_SIZE; x++) {
-            row += grid[y * GRID_SIZE + x] > 128 ? "██" : "  ";
+            row += grid[y * GRID_SIZE + x]! > 128 ? "██" : "  ";
         }
         asciiGrid += row + "\n";
     }
@@ -265,7 +304,7 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
     for (let i = 0; i < grid.length; i++) {
         // Normalization Formula: (PixelValue / 255.0 - Mean) / Std
         // (PixelValue / 255.0 - 0.5) / 0.5
-        floatBuffer[i] = (grid[i] / 255.0 - 0.5) / 0.5;
+        floatBuffer[i] = (grid[i]! / 255.0 - 0.5) / 0.5;
     }
 
     return floatBuffer;

@@ -1,23 +1,15 @@
 import {
-	Editor,
-	MarkdownView,
-	MarkdownFileInfo,
-	Modal,
-	Notice,
-	App,
 	Plugin,
-	TFile,
-	View,
 	debounce,
 	WorkspaceLeaf,
 } from 'obsidian';
-import {
-	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
-} from './settings';
+// import {
+// 	DEFAULT_SETTINGS,
+// 	MyPluginSettings,
+// 	SampleSettingTab,
+// } from './settings';
 import { ComputeEngine } from '@cortex-js/compute-engine';
-
+import { InferenceSession } from 'onnxruntime-web';
 
 import { ExcalidrawAutomate, ExcalidrawElement } from './ExcalidrawAutomate.d';
 import { Symbol } from './utils';
@@ -36,26 +28,25 @@ declare module 'obsidian' {
 
 
 
-
-
-// Remember to rename these classes and interfaces!
-
 export default class MyPlugin extends Plugin {
-	settings!: MyPluginSettings;
+	loadedState = false
+	loadedEl: HTMLElement | undefined
+	settings!: {mySetting: string};
 	unsub: any[] = [];
 	currentMouse = {x: 0, y: 0}
 	
 
-
 	async onload() {
-		await this.loadSettings();
+		// await this.loadSettings();
 		this.app.workspace.onLayoutReady(() => {
-			const ea = (window as any).ExcalidrawAutomate as ExcalidrawAutomate | undefined;
+			const ea = (window as any).ExcalidrawAutomate as ExcalidrawAutomate;
 			
 			if (ea) {
 				console.log("excalidraw detected!")
 				const button = this.createButton()
 				button.style.visibility = "hidden"
+
+				this.loadedEl = this.addStatusBarItem()
 
 				this.registerEvent(
 					this.app.workspace.on('active-leaf-change', 
@@ -79,75 +70,9 @@ export default class MyPlugin extends Plugin {
 				})
 			}
 
-			// // This creates an icon in the left ribbon.
-			// this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// 	// Called when the user clicks the icon.
-			// 	new Notice('This is a notice!');
-			// });
-
-			// // This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-			// const statusBarItemEl = this.addStatusBarItem();
-			// statusBarItemEl.setText('boogie');
-
-			
-
-			// // This adds a simple command that can be triggered anywhere
-			// this.addCommand({
-			// 	id: 'open-modal-simple',
-			// 	name: 'Open modal (simple)',
-			// 	callback: () => {
-			// 		new SampleModal(this.app).open();
-			// 	},
-			// });
-
-			// // This adds an editor command that can perform some operation on the current editor instance
-			// this.addCommand({
-			// 	id: 'replace-selected',
-			// 	name: 'Replace selected content',
-			// 	editorCallback: (
-			// 		editor: Editor,
-			// 		_ctx: MarkdownView | MarkdownFileInfo,
-			// 	) => {
-			// 		editor.replaceSelection('Sample editor command');
-			// 	},
-			// });
-
-			// // This adds a complex command that can check whether the current state of the app allows execution of the command
-			// this.addCommand({
-			// 	id: 'open-modal-complex',
-			// 	name: 'Open modal (complex)',
-			// 	checkCallback: (checking: boolean) => {
-			// 		// Conditions to check
-			// 		const markdownView =
-			// 			this.app.workspace.getActiveViewOfType(MarkdownView);
-			// 		if (markdownView) {
-			// 			// If checking is true, we're simply "checking" if the command can be run.
-			// 			// If checking is false, then we want to actually perform the operation.
-			// 			if (!checking) {
-			// 				new SampleModal(this.app).open();
-			// 			}
-
-			// 			// This command will only show up in Command Palette when the check function returns true
-			// 			return true;
-			// 		}
-			// 		return false;
-			// 	},
-			// });
-
-			// This adds a settings tab so the user can configure various aspects of the plugin
-			this.addSettingTab(new SampleSettingTab(this.app, this));
-
-			// // If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-			// // Using this function will automatically remove the event listener when this plugin is disabled.
-			// this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			// 	new Notice('Click');
-			// });
-
-			// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-			this.registerInterval(
-				window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
-			);
-		});
+			// will keep this in just in case i wanna add settings later
+			// this.addSettingTab(new SampleSettingTab(this.app, this))
+		})
 	}
 	
 
@@ -172,12 +97,12 @@ export default class MyPlugin extends Plugin {
 
 
 	private DEFS: Record<string, string> = {
-		'add': '+', 'dec': '.', 'div': '/', 'eq': '=', 'mul': '*', 'sub': '-'
+		'add': '+', 'dec': '.', 'div': '/', 'eq': '=', 'mul': '*', 'sub': '-', 'open_bracket': '(', 'close_bracket': ')'
 	}
 	grouped: Map<Symbol["id"], Symbol> = new Map()
 
-	private handler = (ea: ExcalidrawAutomate /**elements: ExcalidrawElement[]**/) => {
-		const elements: ExcalidrawElement[] = ea.getViewElements()
+	private handler = (ea: ExcalidrawAutomate /**elements: ExcalidrawElement[]**/, session: InferenceSession) => {
+		const elements: readonly ExcalidrawElement[] = ea.getViewElements()
 		console.log("ELEMENTS:", elements)
 		const strokes = elements.filter(element => (element.type === "freedraw" || element.type === "text") && element.isDeleted === false)
 		
@@ -192,7 +117,7 @@ export default class MyPlugin extends Plugin {
 		console.log(strokes[strokes.length-1]?.points ?? null)
 		console.log("STROKES:", strokes)
 		
-		element.points ? model.runModel(utils.pointsToTensor(element)!).then(predicted => {
+		element.points ? model.runModel(session, utils.pointsToTensor(element)!).then(predicted => {
 
 			if (this.DEFS[predicted]) {
 				predicted = this.DEFS[predicted]!
@@ -211,36 +136,19 @@ export default class MyPlugin extends Plugin {
 
 					//fraction detection
 					const fractions: { id: string, numerator: Symbol[], denominator: Symbol[] }[] = []
-					const consumed = new Set<string>() // ids of every element absorbed into some fraction
+                    const consumed = new Set<string>()
 
-					for (let i = 0; i <= found.length-1; i++) {
-						const e = found[i]!
-						if (e.prediction !== "-") continue
-						
-						const searchElementDown = {...e, bounds: {...e.bounds}}
-						searchElementDown.bounds.minY = e.bounds.maxY + 100 
-						searchElementDown.bounds.maxY =  searchElementDown.bounds.minY + 10
-						searchElementDown.bounds.maxX += 55
-						searchElementDown.bounds.minX = searchElementDown.bounds.maxX - 50
+                    for (let i = 0; i <= found.length-1; i++) {
+                        const e = found[i]!
+                        if (e.prediction !== "-") continue
 
-						const searchElementUp = {...e, bounds: {...e.bounds}}
-						searchElementUp.bounds.minY = e.bounds.minY - 100
-						searchElementUp.bounds.maxY = searchElementUp.bounds.minY + 10
-						searchElementUp.bounds.maxX += 55
-						searchElementUp.bounds.minX = searchElementUp.bounds.maxX - 50
+                        const operands = utils.findFractionOperands(this.grouped, e)
+                        if (!operands) continue
 
-						const width = e.bounds.maxX - e.bounds.minX
-						const foundUp = utils.findElementsLeft({ elements: this.grouped, e: searchElementUp, range: width, rangeY: 75, limit: 1, ea: ea })
-						const foundDown = utils.findElementsLeft({ elements: this.grouped, e: searchElementDown, range: width, rangeY: 75, limit: 1, ea: ea }) // fraction detection
-						
-						
-
-						if (foundUp.length > 0 && foundDown.length > 0) {
-							fractions.push({ id: e.id, numerator: foundUp, denominator: foundDown })
-							consumed.add(e.id)
-							for (const el of [...foundUp, ...foundDown]) consumed.add(el.id)
-						}
-					}
+                        fractions.push({ id: e.id, numerator: operands.numerator, denominator: operands.denominator })
+                        consumed.add(e.id)
+                        for (const el of [...operands.numerator, ...operands.denominator]) consumed.add(el.id)
+                    }
 
 					const fractionMap = new Map(fractions.map(f => [f.id, f]))
 
@@ -270,11 +178,15 @@ export default class MyPlugin extends Plugin {
 					const expressionString = expression.join("")
 					console.log("expression: ", expressionString)
 
-					const parsed = (new ComputeEngine()).parse(expressionString)
-					const simplified = parsed.evaluate()
-					console.log("SIMPLIFIED: ", simplified.toString())
-					const solution = parsed.solve()
-					console.log("SOLUTION: ", solution)
+					const ce = new ComputeEngine()
+					const parsed = ce.parse(expressionString)
+
+					const simplified = ce.expr(parsed.evaluate())
+					console.log("SIMPLIFIED: ", simplified.latex)
+
+					const solved = parsed.solve()
+					const solution = solved ? ce.expr(solved) : null
+					console.log("SOLUTION: ", solution?.latex)
 
 					ea.reset()
 
@@ -283,38 +195,50 @@ export default class MyPlugin extends Plugin {
 						firstFound = found[found.length-2]
 					} //idk why i did this
 
-					const height = (firstFound.bounds.maxY - firstFound.bounds.minY)*1.4 //100
-					ea.style.fontSize = Math.max(96, (ea.style.fontSize / 25) * height) //size calculation
+					const height = (firstFound!.bounds.maxY - firstFound!.bounds.minY)*1.4 //100
+					ea.style.fontSize = Math.max(96, (ea.style.fontSize / 25) * height)/18.67 //size calculation
 					ea.style.opacity = 50
 					
-					const addedId = ea.addText(element.bounds.maxX + (element.bounds.minX - found[found.length-1]!.bounds.maxX)/1.367,
-						(element.bounds.maxY + element.bounds.minY)/2 - (firstFound.bounds.maxY - firstFound.bounds.minY)/2 - height/5.67,
-						simplified.toString() + (solution != null ? ', x = ' + solution.toString() : ""))
+					ea.addLaTex(
+						element.bounds.maxX + (element.bounds.minX - found[found.length-1]!.bounds.maxX)/1.367,
+						(element.bounds.maxY + element.bounds.minY)/2 - (firstFound!.bounds.maxY - firstFound!.bounds.minY)/2 - height/16.67,
+						(solution?.latex != null ? 'x = ' + solution.latex + ", " : "") + simplified.latex, ea.style.fontSize, ea.style.fontSize
+					).then(addedId => {
+							console.log(addedId)
+							const el = ea.getElement(addedId);
+							console.log("Element object:", el);
+							console.log("Is rendered in view:", ea.getViewElements().some(e => e.id === addedId));
+							
+							ea.addElementsToView()
+
+							window.onmousedown = (mouseEvent => {
+								if ((mouseEvent.target as HTMLElement).parentElement!.classList.contains("feedback-btn")) {
+									console.log(mouseEvent.target)
+									
+									const clicked = mouseEvent.target as HTMLElement
+									if (clicked.textContent == "yes") {
+										ea.getElement(addedId).opacity = 100
+										ea.viewUpdateScene({ elements: ea.getViewElements() })
+									} else {
+										ea.deleteViewElements([ea.getElement(addedId)])
+									}
+									
+									this.buttonElement!.style.visibility = "hidden"
+								} else if (!ea.getElement(addedId).isDeleted && ea.getElement(addedId).opacity == 50) {
+									ea.deleteViewElements([ea.getElement(addedId)])
+									this.buttonElement!.style.visibility = "hidden"
+								}
+							})
+						}
+					)
 					
-					ea.addElementsToView()
+					
 
 					this.buttonElement!.style.left = `${this.currentMouse.x}px`
 					this.buttonElement!.style.top = `${this.currentMouse.y}px`
 					
 					this.buttonElement!.style.visibility = "visible"
-					window.onmousedown = (mouseEvent => {
-						if ((mouseEvent.target as HTMLElement).parentElement!.classList.contains("feedback-btn")) {
-							console.log(mouseEvent.target)
-							
-							const clicked = mouseEvent.target as HTMLElement
-							if (clicked.textContent == "yes") {
-								ea.getElement(addedId).opacity = 100
-								ea.viewUpdateScene({ elements: ea.getViewElements() })
-							} else {
-								ea.deleteViewElements([ea.getElement(addedId)])
-							}
-							
-							this.buttonElement!.style.visibility = "hidden"
-						} else if (!ea.getElement(addedId).isDeleted && ea.getElement(addedId).opacity == 50) {
-							ea.deleteViewElements([ea.getElement(addedId)])
-							this.buttonElement!.style.visibility = "hidden"
-						}
-					})
+					
 				}
 			}
 		}) : null
@@ -339,16 +263,30 @@ export default class MyPlugin extends Plugin {
 
 
 	handleCanvasChange(ea: ExcalidrawAutomate) {
+		//START LOADING
+		this.loadedState = false
+		this.updateLoadState()
+		
+
 		for (const unsub of this.unsub) {
 			unsub()
 		}
 		this.unsub = []
 		
-		this.unsub.push(ea.getExcalidrawAPI().onPointerUp((activeTool: {type: string}) => {
-			sleep(10).then(() => {
-				this.handler(ea)
+		sleep(5).then(() => {
+			model.initModel().then(session => {
+				this.unsub.push(ea.getExcalidrawAPI().onPointerUp((activeTool: {type: string}) => {
+					sleep(5).then(() => {
+						this.handler(ea, session)
+					})
+				}))
+
+				//END LOADING
+				this.loadedState = true
+				this.updateLoadState()
 			})
-		}))
+		})
+		
 
 		this.unsub.push(ea.getExcalidrawAPI().onChange(debounce((all: ExcalidrawElement[]) => {
 			// const all: ExcalidrawElement[] = ea.getExcalidrawAPI().getSceneElementsIncludingDeleted()
@@ -371,29 +309,25 @@ export default class MyPlugin extends Plugin {
 	}
 	onunload() {}
 
-	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MyPluginSettings>,
-		);
+
+	updateLoadState() {
+		if(!this.loadedState) {
+			this.loadedEl!.setText("⟳ loading...")
+		} else {
+			this.loadedEl!.setText("drawculator loaded!")
+		}
 	}
 
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+
+	// async loadSettings() {
+	// 	this.settings = Object.assign(
+	// 		{},
+	// 		DEFAULT_SETTINGS,
+	// 		(await this.loadData()) as Partial<MyPluginSettings>,
+	// 	);
+	// }
+
+	// async saveSettings() {
+	// 	await this.saveData(this.settings);
+	// }
 }
-
-class SampleModal extends Modal {
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
-}
-
-

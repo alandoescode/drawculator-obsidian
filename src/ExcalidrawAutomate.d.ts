@@ -4963,3 +4963,5 @@ export class ExcalidrawAutomate {
     this.colorPalette = {};
   }
 }
+
+export { ExcalidrawElement };
