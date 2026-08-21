@@ -347,7 +347,7 @@ export function findElementsLeft(
     let found = []
     let inBounds: Set<Symbol> = new Set()
 
-    rangeY = rangeY ?? range*1.5
+    rangeY = rangeY ?? range*0.67
 
     ea?.setView()
     do {
