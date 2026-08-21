@@ -1,7 +1,7 @@
 {
 	"id": "drawculator",
-	"name": "drawculator",
-	"version": "1.0.2",
+	"name": "Drawculator for Excalidraw",
+	"version": "1.0.3",
 	"minAppVersion": "1.13.0",
 	"description": "Calculates math equations & expressions drawn in Excalidraw.",
 	"author": "ninjaturtle",

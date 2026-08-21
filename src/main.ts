@@ -34,6 +34,7 @@ export default class Drawculator extends Plugin {
 	settings!: {mySetting: string};
 	unsub: any[] = [];
 	currentMouse = {x: 0, y: 0}
+	fontSize = 0
 	
 
 	async onload() {
@@ -59,6 +60,7 @@ export default class Drawculator extends Plugin {
 
 							if (activeView && activeView.getViewType() === "excalidraw") {
 								ea.setView(activeView)
+								this.fontSize = ea.style.fontSize
 								
 								this.handleCanvasChange(ea)
 							}
@@ -108,6 +110,7 @@ export default class Drawculator extends Plugin {
 		// console.log("ELEMENTS:", elements)
 		const strokes = elements.filter(element => (element.type === "freedraw" || element.type === "text") && element.isDeleted === false)
 		
+
 		if (strokes.length <= 0) {/*console.log("nothing to predict");*/ return}
 		const element = utils.groupBounds( //most recent grouped element
 			strokes.map((e) => utils.normalizeElement(e))
@@ -187,21 +190,26 @@ export default class Drawculator extends Plugin {
 					// console.log("SIMPLIFIED: ", simplified.latex)
 
 					const solved = parsed.solve()
-					const solution = solved ? ce.expr(solved) : null
-					// console.log("SOLUTION: ", solution?.latex)
+					// console.log("solved: ", solved)
+					
+					const solution = solved ? solved.toString() : null
+					// console.log("SOLUTION: ", solution)
 
 					let firstFound = found[found.length-1]
 					if (found[found.length-2] && found[found.length-2]!.bounds.maxY - found[found.length-2]!.bounds.minY > found[found.length-1]!.bounds.maxY - found[found.length-1]!.bounds.minY) {
 						firstFound = found[found.length-2]
 					} //idk why i did this but ill keep it here
 
-					const height = (firstFound!.bounds.maxY - firstFound!.bounds.minY)*1.4 //100
-					ea.style.fontSize = Math.max(96, (ea.style.fontSize / 25) * height)/18.67 //size calculation
+					ea.reset()
+
+					const height = (firstFound!.bounds.maxY - firstFound!.bounds.minY)*1.2 //100
+					ea.style.fontSize = Math.max(156, (this.fontSize / 25) * height)/18 //size calculation
+					
 					
 					ea.addLaTex(
 						element.bounds.maxX + (element.bounds.minX - found[found.length-1]!.bounds.maxX)/1.367,
 						(element.bounds.maxY + element.bounds.minY)/2 - (firstFound!.bounds.maxY - firstFound!.bounds.minY)/2 - height/16.67,
-						(solution?.latex != null ? 'x = ' + solution.latex + ", " : "") + simplified.latex, ea.style.fontSize, ea.style.fontSize
+						(solution != null ? 'x = ' + solution + ", " : "") + simplified.latex, ea.style.fontSize, ea.style.fontSize
 					).then(addedId => {
 							// console.log(addedId)
 							
@@ -263,7 +271,7 @@ export default class Drawculator extends Plugin {
 			(Math.abs((prev.bounds.maxY + prev.bounds.minY) /2 - (e.bounds.maxY + e.bounds.minY) /2)) < 70) {
 				e.prediction = "*"
 		} else if (prev && Number(e.prediction!) &&  // powers detection
-			e.bounds.maxY < (prev.bounds.maxY + prev.bounds.minY)/2 &&
+			e.bounds.maxY < (prev.bounds.maxY + prev.bounds.minY)/1.9 &&
 			e.bounds.minY > prev.bounds.minY - (prev.bounds.maxY - prev.bounds.minY)) {
 				e.prediction = "^" + e.prediction
 		}

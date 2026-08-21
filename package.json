@@ -26,7 +26,7 @@
 		"typescript-eslint": "^8.59.1"
 	},
 	"dependencies": {
-		"@cortex-js/compute-engine": "^0.79.2",
+		"@cortex-js/compute-engine": "0.115.0",
 		"onnxruntime-web": "^1.27.0"
 	},
 	"repository": {
