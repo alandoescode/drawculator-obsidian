@@ -181,13 +181,13 @@ export default class Drawculator extends Plugin {
 					}
 
 					const expressionString = expression.join("")
-					// console.log("expression: ", expressionString)
+					console.log("expression: ", expressionString)
 
 					const ce = new ComputeEngine()
 					const parsed = ce.parse(expressionString)
 
 					const simplified = ce.expr(parsed.evaluate())
-					// console.log("SIMPLIFIED: ", simplified.latex)
+					console.log("SIMPLIFIED: ", simplified.latex)
 
 					const solved = parsed.solve()
 					// console.log("solved: ", solved)
