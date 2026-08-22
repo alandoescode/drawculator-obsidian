@@ -8,7 +8,7 @@ import {
 // 	MyPluginSettings,
 // 	SampleSettingTab,
 // } from './settings';
-import { ComputeEngine } from '@cortex-js/compute-engine';
+import { ComputeEngine, Expression } from '@cortex-js/compute-engine';
 import { InferenceSession } from 'onnxruntime-web';
 
 import { ExcalidrawAutomate, ExcalidrawElement } from './ExcalidrawAutomate.d';
@@ -41,9 +41,12 @@ export default class Drawculator extends Plugin {
 		// await this.loadSettings();
 		this.app.workspace.onLayoutReady(() => {
 			const ea = (window as any).ExcalidrawAutomate as ExcalidrawAutomate;
-			
+
 			if (ea) {
 				console.log("excalidraw detected!")
+
+				window.Math
+
 				const button = this.createButton()
 				button.setCssStyles({
 					visibility: 'hidden'
@@ -181,18 +184,18 @@ export default class Drawculator extends Plugin {
 					}
 
 					const expressionString = expression.join("")
-					console.log("expression: ", expressionString)
+					// console.log("expression: ", expressionString)
 
 					const ce = new ComputeEngine()
 					const parsed = ce.parse(expressionString)
 
-					const simplified = ce.expr(parsed.evaluate())
-					console.log("SIMPLIFIED: ", simplified.latex)
+					const simplified = ce.expr(parsed.simplify())
+					// console.log("SIMPLIFIED: ", simplified.latex)
 
 					const solved = parsed.solve()
 					// console.log("solved: ", solved)
 					
-					const solution = solved ? solved.toString() : null
+					const solution = Array.isArray(solved) ? (solved as unknown as Expression[]).map(s => utils.fixLaTeX(s.latex)) : null
 					// console.log("SOLUTION: ", solution)
 
 					let firstFound = found[found.length-1]
@@ -209,7 +212,7 @@ export default class Drawculator extends Plugin {
 					ea.addLaTex(
 						element.bounds.maxX + (element.bounds.minX - found[found.length-1]!.bounds.maxX)/1.367,
 						(element.bounds.maxY + element.bounds.minY)/2 - (firstFound!.bounds.maxY - firstFound!.bounds.minY)/2 - height/16.67,
-						(solution != null ? 'x = ' + solution + ", " : "") + simplified.latex, ea.style.fontSize, ea.style.fontSize
+						(solution && solution.length >= 1 ? `x = ${solution.join(', ')}` + ", " : "") + simplified.latex, ea.style.fontSize, ea.style.fontSize
 					).then(addedId => {
 							// console.log(addedId)
 							
@@ -265,16 +268,20 @@ export default class Drawculator extends Plugin {
 
 
 	transformPrediction(e: Symbol, prev: Symbol | undefined): string {
+		console.warn("PREVIOUS: ", prev?.prediction, " CURRENT: ", e.prediction)
 		if (e.prediction == "*") { //change x multiplication to x variable
 			e.prediction = "x"
 		} else if (prev && e.prediction == "." && // dot and multiplication detection
 			(Math.abs((prev.bounds.maxY + prev.bounds.minY) /2 - (e.bounds.maxY + e.bounds.minY) /2)) < 70) {
 				e.prediction = "*"
 		} else if (prev && Number(e.prediction!) &&  // powers detection
-			e.bounds.maxY < (prev.bounds.maxY + prev.bounds.minY)/1.9 &&
+			e.bounds.maxY < ((prev.bounds.maxY + prev.bounds.minY)/2) + (prev.bounds.maxY-prev.bounds.minY)/5 &&
 			e.bounds.minY > prev.bounds.minY - (prev.bounds.maxY - prev.bounds.minY)) {
 				e.prediction = "^" + e.prediction
+				// console.log("prev BOUNDS: ", prev.bounds, " CURENT boudbns: ", e.bounds)
 		}
+
+		
 
 		return e.prediction!
 	}

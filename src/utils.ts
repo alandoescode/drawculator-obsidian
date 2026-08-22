@@ -375,3 +375,21 @@ export function findElementsLeft(
     
     return inBoundsSorted
 }
+
+
+
+
+export function fixLaTeX(latex: string) {
+    if (!latex) return ''
+    
+    return latex
+    .replace(/\\(imaginaryI|ComplexI)/g, 'i')
+    .replace(/\\exponentialE/g, 'e')
+    .replace(/\\doubleStruckCapitalR/g, '\\mathbb{R}')
+    .replace(/\\doubleStruckCapitalC/g, '\\mathbb{C}')
+    .replace(/\\doubleStruckCapitalZ/g, '\\mathbb{Z}')
+    .replace(/\\doubleStruckCapitalI/g, '\\infty')
+    .replace(/\\Element/g, '\\in')
+    .replace(/\\NotEqual/g, '\\neq')
+    .replace(/\\differentialD/g, 'd');
+}
