@@ -3,6 +3,8 @@
 
 Draw mathematical expressions in Obsidian and watch them solve themselves! Drawculator is an Obsidian plugin that uses AI to recognize hand-drawn equations and automatically computes their solutions.
 
+### SURVEY/EASY BUG REPORTS: https://forms.gle/okYc5b7iz2RiiL5W8
+
 ## Features
 
 - **Hand-written Math Recognition**: Draw mathematical expressions using Obsidian's Excalidraw integration
