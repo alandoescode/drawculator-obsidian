@@ -40,3 +40,19 @@ If your plugin does not need CSS, delete this file.
         border-bottom-right-radius: 15%;
     }
 }
+
+.expression-label {
+    position: fixed;
+
+    margin: 0px;
+    line-height: 1;
+    text-align: center;
+    background-color: var(--interactive-normal);
+
+    z-index: 100;
+    border-radius: 7px;
+    color: var(--text-muted);
+    border: 1px solid var(--background-modifier-border);
+    box-shadow: var(--input-shadow);
+    transition: transform 0.1s ease;
+}

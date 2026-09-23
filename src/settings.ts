@@ -1,38 +1,33 @@
-// import { App, PluginSettingTab, Setting } from 'obsidian';
-// import Drawculator from './main';
+import { App, PluginSettingTab } from 'obsidian';
+import Drawculator from './main';
 
-// export interface MyPluginSettings {
-// 	mySetting: string;
-// }
+export interface DrawculatorSettings {
+	expressionPreview: boolean;
+}
 
-// export const DEFAULT_SETTINGS: MyPluginSettings = {
-// 	mySetting: 'default',
-// };
+export const DEFAULT_SETTINGS: DrawculatorSettings = {
+	expressionPreview: true,
+};
 
-// export class SampleSettingTab extends PluginSettingTab {
-// 	plugin: Drawculator;
+export class SettingTab extends PluginSettingTab {
+	plugin: Drawculator;
 
-// 	constructor(app: App, plugin: Drawculator) {
-// 		super(app, plugin);
-// 		this.plugin = plugin;
-// 	}
+	constructor(app: App, plugin: Drawculator) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
 
-// 	display(): void {
-// 		const { containerEl } = this;
-
-// 		containerEl.empty();
-
-// 		new Setting(containerEl)
-// 			.setName('Settings #1')
-// 			.setDesc("It's a secret")
-// 			.addText((text) =>
-// 				text
-// 					.setPlaceholder('Enter your secret')
-// 					.setValue(this.plugin.settings.mySetting)
-// 					.onChange(async (value) => {
-// 						this.plugin.settings.mySetting = value;
-// 						await this.plugin.saveSettings();
-// 					}),
-// 			);
-// 	}
-// }
+	getSettingDefinitions() {
+		return [
+            {
+                name: 'Enable expression preview',
+                desc: 'see what the ai sees',
+                control: {
+					type: 'toggle' as const,
+                    key: 'expressionPreview',
+					defaultValue: true,
+                },
+            }
+        ]
+	}
+}

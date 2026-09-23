@@ -2,12 +2,13 @@ import {
 	Plugin,
 	debounce,
 	WorkspaceLeaf,
+	View
 } from 'obsidian';
-// import {
-// 	DEFAULT_SETTINGS,
-// 	MyPluginSettings,
-// 	SampleSettingTab,
-// } from './settings';
+import {
+	DEFAULT_SETTINGS,
+	DrawculatorSettings,
+	SettingTab,
+} from './settings';
 import { ComputeEngine, Expression } from '@cortex-js/compute-engine';
 import { InferenceSession } from 'onnxruntime-web';
 
@@ -31,21 +32,20 @@ declare module 'obsidian' {
 export default class Drawculator extends Plugin {
 	loadedState = false
 	loadedEl: HTMLElement | undefined
-	settings!: {mySetting: string};
+	settings!: DrawculatorSettings;
 	unsub: any[] = [];
+	canvasGeneration = 0 // tracker to make sure main loop is on track (real uncaught illegal access fix)
 	currentMouse = {x: 0, y: 0}
 	fontSize = 0
 	
 
 	async onload() {
-		// await this.loadSettings();
+		await this.loadSettings();
 		this.app.workspace.onLayoutReady(() => {
 			const ea = (window as any).ExcalidrawAutomate as ExcalidrawAutomate;
 
 			if (ea) {
 				console.log("excalidraw detected!")
-
-				window.Math
 
 				const button = this.createButton()
 				button.setCssStyles({
@@ -54,14 +54,19 @@ export default class Drawculator extends Plugin {
 
 				this.loadedEl = this.addStatusBarItem()
 
+				let lastViewId: string | null = null
 				this.registerEvent(
-					this.app.workspace.on('active-leaf-change', 
+					(this.app.workspace as any).on('active-leaf-change', 
 						(leaf: WorkspaceLeaf) => {
 							// console.log("boggie woogie")
 
 							const activeView = leaf?.view
 
 							if (activeView && activeView.getViewType() === "excalidraw") {
+								const viewId = (activeView as any).id ?? activeView.containerEl.id
+								if (lastViewId === viewId) return
+								lastViewId = viewId
+
 								ea.setView(activeView)
 								this.fontSize = ea.style.fontSize
 								
@@ -77,11 +82,23 @@ export default class Drawculator extends Plugin {
 				})
 			}
 
-			// will keep this in just in case i wanna add settings later
-			// this.addSettingTab(new SampleSettingTab(this.app, this))
+			this.addSettingTab(new SettingTab(this.app, this))
 		})
 	}
+
+	onunload() {
+		this.canvasGeneration++
+		this.clearUnsub();
+        this.buttonElement?.remove();
+	}
 	
+	private clearUnsub() {
+        for (const unsub of this.unsub) {
+            if (typeof unsub === 'function') unsub();
+        }
+        this.unsub = [];
+    }
+
 
 	buttonElement: HTMLDivElement | null = null
 	private createButton() {
@@ -103,15 +120,63 @@ export default class Drawculator extends Plugin {
 	}
 
 
+	
+	private createExpressionLabel(expression: string, pos: {x: number, y: number}, width: number) {
+		const expressionLabelElement = this.app.workspace.containerEl.createEl('p', {
+			cls: "expression-label",
+			text: expression,
+		})
+
+		expressionLabelElement.style.top = `${pos.y-67}px`
+		expressionLabelElement.style.left = `${pos.x}px`
+		
+		expressionLabelElement.setCssStyles({
+			visibility: 'visible',
+			width: `${Math.max(Math.abs(width), expressionLabelElement.getBoundingClientRect().width)}px`,
+			height: '57px',
+			fontSize: '50px'
+		})
+
+		const expLabelMouseDownListener = this.registerDomEvent(window, "mousedown", (mouseEvent: MouseEvent) => {
+			expressionLabelElement.remove()
+		})
+		return expressionLabelElement
+	}
+
+	//overengineered but it works
+	private sceneToViewport(ea: ExcalidrawAutomate, x: number, y: number) {
+		const api = ea.getExcalidrawAPI()
+		if (!api) return {x: 0, y: 0}
+
+		const appState = api.getAppState()
+		const canvas = this.app.workspace.containerEl.querySelector<HTMLCanvasElement>(
+			'.workspace-leaf-content[data-type="excalidraw"] canvas'
+		)
+		if (!canvas || !canvas.isConnected) return {x: 0, y: 0}
+
+		const canvasBounds = canvas?.getBoundingClientRect()
+		const zoom = appState.zoom.value
+
+		return {
+			x: (x + appState.scrollX) * zoom + (canvasBounds?.left ?? 0),
+			y: (y + appState.scrollY) * zoom + (canvasBounds?.top ?? 0),
+		}
+	}
+
+
+
 	private DEFS: Record<string, string> = {
 		'add': '+', 'dec': '.', 'div': '/', 'eq': '=', 'mul': '*', 'sub': '-', 'open_bracket': '(', 'close_bracket': ')'
 	}
 	grouped: Map<Symbol["id"], Symbol> = new Map()
 
 	private handler = (ea: ExcalidrawAutomate /**elements: ExcalidrawElement[]**/, session: InferenceSession) => {
+		const activeLeaf = this.app.workspace.getActiveViewOfType(View as any)
+		if (!activeLeaf || activeLeaf.getViewType() !== "excalidraw") return
+
 		const elements: readonly ExcalidrawElement[] = ea.getViewElements()
 		// console.log("ELEMENTS:", elements)
-		const strokes = elements.filter(element => (element.type === "freedraw" || element.type === "text") && element.isDeleted === false)
+		const strokes = elements.filter(element => element.type === "freedraw" && element.isDeleted === false)
 		
 
 		if (strokes.length <= 0) {/*console.log("nothing to predict");*/ return}
@@ -129,6 +194,18 @@ export default class Drawculator extends Plugin {
 
 			if (this.DEFS[predicted]) {
 				predicted = this.DEFS[predicted]!
+			}
+
+			if (this.settings.expressionPreview) {
+				const labelPosition = this.sceneToViewport(
+					ea,
+					element.bounds.minX,
+					element.bounds.minY,
+				)
+				this.createExpressionLabel(predicted, {
+					x: labelPosition.x,
+					y: labelPosition.y
+				}, element.bounds.maxX - element.bounds.minX)
 			}
 
 			// console.log('Predicted digit: ', predicted)
@@ -185,6 +262,22 @@ export default class Drawculator extends Plugin {
 
 					const expressionString = expression.join("")
 					// console.log("expression: ", expressionString)
+					
+
+					//add label to show expression above real expression
+					if(this.settings.expressionPreview) {
+						const labelPosition = this.sceneToViewport(
+							ea,
+							found[0]?.bounds.minX ?? 0,
+							Math.min(...found.map(e => e.bounds.minY)),
+						)
+						
+						const expressionLabel = this.createExpressionLabel(expressionString,
+							{x: labelPosition.x, y: labelPosition.y-67},
+							found[found.length-1]!.bounds.maxX - found[0]!.bounds.minX)
+					}
+
+
 
 					const ce = new ComputeEngine()
 					const parsed = ce.parse(expressionString)
@@ -212,7 +305,7 @@ export default class Drawculator extends Plugin {
 					ea.addLaTex(
 						element.bounds.maxX + (element.bounds.minX - found[found.length-1]!.bounds.maxX)/1.367,
 						(element.bounds.maxY + element.bounds.minY)/2 - (firstFound!.bounds.maxY - firstFound!.bounds.minY)/2 - height/16.67,
-						(solution && solution.length >= 1 ? `x = ${solution.join(', ')}` + ", " : "") + simplified.latex, ea.style.fontSize, ea.style.fontSize
+						(solution && solution.length >= 1 ? `x = ${solution.join(', ')}` + " | " : "") + simplified.latex, ea.style.fontSize, ea.style.fontSize
 					).then(addedId => {
 							// console.log(addedId)
 							
@@ -225,8 +318,7 @@ export default class Drawculator extends Plugin {
 							
 
 							
-
-							window.onmousedown = (mouseEvent => {
+							const removeMouseDownListener = this.registerDomEvent(window, "mousedown", (mouseEvent: MouseEvent) => {
 								if ((mouseEvent.target as HTMLElement).parentElement!.classList.contains("feedback-btn")) {
 									// console.log(mouseEvent.target)
 									
@@ -262,13 +354,15 @@ export default class Drawculator extends Plugin {
 					
 				}
 			}
+		}).catch(error => {
+			console.error("Drawculator model error", error)
 		}) : null
 		// console.log("GROUPED:", grouped)
 	}
 
 
 	transformPrediction(e: Symbol, prev: Symbol | undefined): string {
-		console.warn("PREVIOUS: ", prev?.prediction, " CURRENT: ", e.prediction)
+		// console.warn("PREVIOUS: ", prev?.prediction, " CURRENT: ", e.prediction)
 		if (e.prediction == "*") { //change x multiplication to x variable
 			e.prediction = "x"
 		} else if (prev && e.prediction == "." && // dot and multiplication detection
@@ -288,27 +382,35 @@ export default class Drawculator extends Plugin {
 
 
 	handleCanvasChange(ea: ExcalidrawAutomate) {
+		const generation = ++this.canvasGeneration
 		//START LOADING
 		this.loadedState = false
 		this.updateLoadState()
 		
-
-		for (const unsub of this.unsub) {
-			unsub()
-		}
-		this.unsub = []
+		this.clearUnsub()
 		
 		sleep(5).then(() => {
+			if (generation !== this.canvasGeneration) return
 			model.initModel().then(session => {
-				this.unsub.push(ea.getExcalidrawAPI().onPointerUp((activeTool: {type: string}) => {
+				if (generation !== this.canvasGeneration) return
+				const api = ea.getExcalidrawAPI()
+
+				this.unsub.push(
+					api.onPointerUp((_activeTool: {type: string}) => {
 					sleep(5).then(() => {
-						this.handler(ea, session)
+						if (generation === this.canvasGeneration) {
+							this.handler(ea, session)
+						}
 					})
 				}))
 
 				//END LOADING
 				this.loadedState = true
 				this.updateLoadState()
+			}).catch(error => {
+				if (generation === this.canvasGeneration) {
+					console.error("Drawculator model initialization error", error)
+				}
 			})
 		})
 		
@@ -332,7 +434,6 @@ export default class Drawculator extends Plugin {
 			// console.log("grouped: ", this.grouped)
 		}, 100, true)))
 	}
-	onunload() {}
 
 
 	updateLoadState() {
@@ -344,15 +445,15 @@ export default class Drawculator extends Plugin {
 	}
 
 
-	// async loadSettings() {
-	// 	this.settings = Object.assign(
-	// 		{},
-	// 		DEFAULT_SETTINGS,
-	// 		(await this.loadData()) as Partial<MyPluginSettings>,
-	// 	);
-	// }
+	async loadSettings() {
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			(await this.loadData()) as Partial<DrawculatorSettings>,
+		);
+	}
 
-	// async saveSettings() {
-	// 	await this.saveData(this.settings);
-	// }
+	async saveSettings() {
+		await this.saveData(this.settings);
+	}
 }

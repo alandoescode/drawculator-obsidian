@@ -68,11 +68,11 @@ export function groupBounds(elements: Symbol[], threshold: number = 10) {
         const e2 = elements[i-1]!
 
         const dx = Math.max(0, 
-            Math.max(e.bounds.minX - e2.bounds.maxX, e2.bounds.minX - e.bounds.maxX) //math.min(math.abs(e.bounds.... - e2.bounds....))
+            Math.max(groupedElement.bounds.minX - e2.bounds.maxX, e2.bounds.minX - groupedElement.bounds.maxX)
         )
 
         const dy = Math.max(0, 
-            Math.max(e.bounds.minY - e2.bounds.maxY, e2.bounds.minY - e.bounds.maxY)
+            Math.max(groupedElement.bounds.minY - e2.bounds.maxY, e2.bounds.minY - groupedElement.bounds.maxY)
         )
 
         //distance for general threshold, changed to seperate dx & dy to detect easier
@@ -80,12 +80,15 @@ export function groupBounds(elements: Symbol[], threshold: number = 10) {
 
         if (dx <= threshold && dy <= thresholdY) {
             groupedElement.id = e2.id
-            e2.points ? groupedElement.points?.push(...e2.points) : undefined
+            if (e2.points) {
+                groupedElement.points ??= []
+                groupedElement.points.push(...e2.points)
+            }
             groupedElement.bounds = {
-                minX: Math.min(e.bounds.minX, e2.bounds.minX),
-                maxX: Math.max(e.bounds.maxX, e2.bounds.maxX),
-                minY: Math.min(e.bounds.minY, e2.bounds.minY),
-                maxY: Math.max(e.bounds.maxY, e2.bounds.maxY)
+                minX: Math.min(groupedElement.bounds.minX, e2.bounds.minX),
+                maxX: Math.max(groupedElement.bounds.maxX, e2.bounds.maxX),
+                minY: Math.min(groupedElement.bounds.minY, e2.bounds.minY),
+                maxY: Math.max(groupedElement.bounds.maxY, e2.bounds.maxY)
             }
             groupedElement.children!.push(e2)
 
@@ -205,7 +208,7 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
     // 2. Uniform scaling
     // const maxDimension = Math.max(dataWidth, dataHeight);
     // const scale = USABLE_SIZE / maxDimension;
-    const SOFTENING = 70
+    const SOFTENING = 67
     const maxDimension = Math.max(dataWidth, dataHeight);
     const scale = USABLE_SIZE / (maxDimension + SOFTENING);
 
@@ -259,7 +262,7 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
     let offset = 0
     const threshold = 30
 
-    element.children?.forEach((e, i) => {
+    element.children?.forEach(e => {
         if (e.points) {
             for (let i = 0; i < e.points.length - 1; i++) {
                 drawLine(pixelPoints[i + offset]!.x, pixelPoints[i + offset]!.y, pixelPoints[i + offset + 1]!.x, pixelPoints[i + offset + 1]!.y);
