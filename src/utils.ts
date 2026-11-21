@@ -171,8 +171,7 @@ function isWithinHorizontalRange(el: Symbol, xMin: number, xMax: number) {
 
 
 /**
- * Converts line coordinates into a 4D ONNX Tensor.
- * Preserves the original aspect ratio, applies padding, and normalizes values to [0.0, 1.0].
+ * converts line coordinates into a 4D tensor
  * @returns An ONNX Tensor with shape [1, 1, 32, 32]
  */
 export function pointsToTensor(element: Symbol): Float32Array | null {
@@ -302,7 +301,7 @@ export function pointsToTensor(element: Symbol): Float32Array | null {
     // console.log("%cModel Matrix Visualisation:", "font-weight: bold; color: #4af626;");
     // console.log(asciiGrid);
 
-    // 8. MODIFIED: Adjusted to 32x32 size and updated to use custom (0.5, 0.5) normalization
+    // 8. Adjust to 32x32 size and use (0.5, 0.5) normalization
     const floatBuffer = new Float32Array(GRID_SIZE * GRID_SIZE);
     for (let i = 0; i < grid.length; i++) {
         // Normalization Formula: (PixelValue / 255.0 - Mean) / Std
