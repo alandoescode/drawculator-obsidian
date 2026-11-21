@@ -163,6 +163,27 @@ export default class Drawculator extends Plugin {
 		}
 	}
 
+	//specific function for refreshing latex image
+	// bc new update broke simple editing for some odd reason
+	private refreshLatex(ea: ExcalidrawAutomate, id: string, opacity?: number) {
+		const api = ea.getExcalidrawAPI()
+		if (!api) return
+
+		api.updateScene({
+			elements: ea.getViewElements().map((element) =>
+				element.id === id
+					? {
+						...element,
+						opacity: opacity ?? element.opacity,
+						version: element.version + 1,
+						versionNonce: element.versionNonce ^ 1,
+					}
+					: element
+			),
+			files: api.getFiles(),
+		})
+	}
+
 
 
 	private DEFS: Record<string, string> = {
@@ -306,42 +327,39 @@ export default class Drawculator extends Plugin {
 						element.bounds.maxX + (element.bounds.minX - found[found.length-1]!.bounds.maxX)/1.367,
 						(element.bounds.maxY + element.bounds.minY)/2 - (firstFound!.bounds.maxY - firstFound!.bounds.minY)/2 - height/16.67,
 						(solution && solution.length >= 1 ? `x = ${solution.join(', ')}` + " | " : "") + simplified.latex, ea.style.fontSize, ea.style.fontSize
-					).then(addedId => {
-							// console.log(addedId)
-							
-							// console.log("Element object:", el);
-							// console.log("Is rendered in view:", ea.getViewElements().some(e => e.id === addedId));
-							
-							ea.addElementsToView()
-							const el = ea.getElement(addedId);
-							el.opacity = 50
-							
+					).then(async (addedId) => {
+						// console.log(addedId)
+						
+						// console.log("Element object:", el);
+						// console.log("Is rendered in view:", ea.getViewElements().some(e => e.id === addedId));
+						
+						const el = ea.getElement(addedId);
+						el.opacity = 50
+						await ea.addElementsToView()
+						this.refreshLatex(ea, addedId)
 
-							
-							const removeMouseDownListener = this.registerDomEvent(window, "mousedown", (mouseEvent: MouseEvent) => {
-								if ((mouseEvent.target as HTMLElement).parentElement!.classList.contains("feedback-btn")) {
-									// console.log(mouseEvent.target)
-									
-									const clicked = mouseEvent.target as HTMLElement
-									if (clicked.textContent == "yes") {
-										el.opacity = 100
-										ea.viewUpdateScene({ elements: ea.getViewElements() })
-									} else {
-										ea.deleteViewElements([ea.getElement(addedId)])
-									}
-									
-									this.buttonElement!.setCssStyles({
-										visibility: 'hidden'
-									})
-								} else if (!el.isDeleted && el.opacity == 50) {
-									ea.deleteViewElements([el])
-									this.buttonElement!.setCssStyles({
-										visibility: 'hidden'
-									})
+						this.registerDomEvent(window, "mousedown", (mouseEvent: MouseEvent) => {
+							if ((mouseEvent.target as HTMLElement).parentElement!.classList.contains("feedback-btn")) {
+								// console.log(mouseEvent.target)
+								
+								const clicked = mouseEvent.target as HTMLElement
+								if (clicked.textContent == "yes") {
+									this.refreshLatex(ea, addedId, 100)
+								} else {
+									ea.deleteViewElements([ea.getElement(addedId)])
 								}
-							})
-						}
-					)
+								
+								this.buttonElement!.setCssStyles({
+									visibility: 'hidden'
+								})
+							} else if (!el.isDeleted && el.opacity == 50) {
+								ea.deleteViewElements([el])
+								this.buttonElement!.setCssStyles({
+									visibility: 'hidden'
+								})
+							}
+						}, {once: true})
+					})
 					
 					
 
@@ -380,59 +398,78 @@ export default class Drawculator extends Plugin {
 		return e.prediction!
 	}
 
-
 	handleCanvasChange(ea: ExcalidrawAutomate) {
-		const generation = ++this.canvasGeneration
-		//START LOADING
-		this.loadedState = false
-		this.updateLoadState()
+		const waitForAPI = async () => {
+			let api;
 		
-		this.clearUnsub()
-		
-		sleep(5).then(() => {
-			if (generation !== this.canvasGeneration) return
-			model.initModel().then(session => {
-				if (generation !== this.canvasGeneration) return
-				const api = ea.getExcalidrawAPI()
-
-				this.unsub.push(
-					api.onPointerUp((_activeTool: {type: string}) => {
-					sleep(5).then(() => {
-						if (generation === this.canvasGeneration) {
-							this.handler(ea, session)
-						}
-					})
-				}))
-
-				//END LOADING
-				this.loadedState = true
-				this.updateLoadState()
-			}).catch(error => {
-				if (generation === this.canvasGeneration) {
-					console.error("Drawculator model initialization error", error)
-				}
-			})
-		})
-		
-
-		this.unsub.push(ea.getExcalidrawAPI().onChange(debounce((all: ExcalidrawElement[]) => {
-			// const all: ExcalidrawElement[] = ea.getExcalidrawAPI().getSceneElementsIncludingDeleted()
-			const ids = new Set(all.map(item => item.id))
-
-			for (const id of this.grouped.keys()) {
-				if (!ids.has(id)) {
-					this.grouped.delete(id) //deletes element if mismatch in all & this.grouped
-				}
+			while (
+				generation === this.canvasGeneration &&
+				!(api = ea.getExcalidrawAPI())
+			) {
+				await new Promise(r => setTimeout(r, 50));
 			}
+		
+			return api ?? null;
+		};
 
-			all.forEach(e => {
-				if (e.isDeleted) {
-					this.grouped.delete(e.id) //deletes element in this.group if it was erased
-				}
+		const generation = ++this.canvasGeneration
+		waitForAPI().then((api) => {
+			
+			//START LOADING
+			this.loadedState = false
+			this.updateLoadState()
+			
+			this.clearUnsub()
+			
+			sleep(5).then(() => {
+				if (generation !== this.canvasGeneration) return
+				model.initModel().then(session => {
+					if (generation !== this.canvasGeneration) return
+
+					this.unsub.push(
+						api.onPointerUp((_activeTool: {type: string}) => {
+							sleep(5).then(() => {
+								if (generation === this.canvasGeneration) {
+									this.handler(ea, session)
+								}
+							})
+						}
+					))
+
+					//END LOADING
+					this.loadedState = true
+					this.updateLoadState()
+				}).catch(error => {
+					if (generation === this.canvasGeneration) {
+						console.error("Drawculator model initialization error", error)
+					}
+				})
 			})
+			
+			this.unsub.push(api.onChange(debounce((all: ExcalidrawElement[]) => {
+				// const all: ExcalidrawElement[] = ea.getExcalidrawAPI().getSceneElementsIncludingDeleted()
+				const liveIds = new Set(
+					all.filter(e => !e.isDeleted).map(e => e.id)
+				)
+				
+				for (const [id, group] of this.grouped) {
+					if (
+						!liveIds.has(id) ||
+						group.children?.some(child => !liveIds.has(child.id))
+					) {
+						this.grouped.delete(id) //deletes element if mismatch in all & this.grouped
+					}
+				}
 
-			// console.log("grouped: ", this.grouped)
-		}, 100, true)))
+				all.forEach(e => {
+					if (e.isDeleted) {
+						this.grouped.delete(e.id) //deletes element in this.group if it was erased
+					}
+				})
+
+				// console.log("grouped: ", this.grouped)
+			}, 100, true)))
+			})
 	}
 
 
